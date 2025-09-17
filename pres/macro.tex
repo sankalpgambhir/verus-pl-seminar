@@ -69,6 +69,15 @@
         {==>}{{==>}} {3},
 }
 
+\lstdefinelanguage{rust}{
+    keywords={abstract,alignof,as,become,box,break,const,continue,crate,do,else,enum,extern,false,final,fn,for,if,impl,in,let,loop,macro,match,mod,move,mut,offsetof,override,priv,proc,pub,pure,ref,return,self,Self,sizeof,static,struct,super,trait,true,type,typeof,unsafe,unsized,use,virtual,where,while,yield,ghost,tracked,requires,ensures,old},
+    morecomment=[l]{//},
+    morecomment=[s]{/*}{*/},
+    morestring=[b]",
+    morestring=[b]',
+    sensitive=true,
+}
+
 \lstset{style=stolenstyle}
 
 \lstdefinestyle{lisa}{
@@ -119,5 +128,9 @@
 
 \usepackage{mathpartir}
 \usepackage{stmaryrd}
+
+\usepackage{pifont}
+\newcommand{\cmark}{\ding{51}}%
+\newcommand{\xmark}{\ding{55}}%
 
 \newcommand{\mathcomment}[1]{\text{\textcolor{black!50}{\emph{#1}}}}

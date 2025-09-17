@@ -12,15 +12,356 @@
 \input{macro}
 
 \title{Verus: Verifying Rust Programs Using Linear Ghost Types}
+\subtitle{Andrea Lattuada, Travis Hance, Chanhee Cho, Matthias Brun, Isitha Subasinghe, Yi Zhou, Jon Howell, Bryan Parno, Chris Hawblitzel}
 \author{Sankalp Gambhir}
 
 \begin{document}
 
 \maketitle
 
-\begin{frame}
-  \frametitle{The Problem}
+\begin{frame}[fragile]
+  \frametitle{Rust and Ownership}
 
+  Rust has ownership and borrowing built into its type system, and it appears in
+  a few different forms to the user: 
+
+  \pause
+
+  \begin{center}
+    \begin{tabular}{c c c}
+      \textbf{Instance}     & \textbf{Mutability} & \textbf{Semantics}                       \\
+      \pause
+      \lstinline|x: T|      & \xmark              & Affine                                   \\
+      \pause
+      \lstinline|mut x: T|  & \cmark              & Affine                                   \\
+      \pause
+      \lstinline|x: &T|     & \xmark              & Shared with unrestricted (immutable) use \\
+      \pause
+      \lstinline|x: &mut T| & \cmark              & Exclusive reference, affine              \\
+    \end{tabular}
+  \end{center}
+
+  \pause
+  % there are a few other options
+  Others: \lstinline|&a' T|, \lstinline|&mut a' T|, \lstinline|*const T|,
+  \lstinline|*mut T|, \lstinline|Box<T>|, \lstinline|Arc<T>|,
+  \lstinline|Mutex<T>|
+
+  % but we'll talk about only a couple of them, as and when they show up
+
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Pop Quiz}
+
+  Which of the following Rust programs should compile?
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+  \begin{lstlisting}[language=rust]
+fn main() {
+    let mut x = 5;
+    let r1 = &mut x;
+    let r2 = &mut x;
+    println!("{} {}", r1, r2);
+}
+\end{lstlisting}
+
+  \pause {\centering \xmark}
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+  \begin{lstlisting}[language=rust]
+fn main() {
+    let s = String::from("hello");
+    let s2 = s;
+    println!("{}", s);
+}
+\end{lstlisting}
+
+  \pause {\centering \xmark}
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+  \begin{lstlisting}[language=rust]
+fn say_what() -> &String {
+    let s = String::from("hello");
+    &s
+}
+\end{lstlisting}
+
+  \pause {\centering \xmark}
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+  \begin{lstlisting}[language=rust]
+fn main() {
+    let mut x = 5;
+    let r1 = &x;
+    let r2 = &mut x;
+    println!("{}", r1);
+}
+\end{lstlisting}
+
+  \pause {\centering \xmark}
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+  \begin{lstlisting}[language=rust]
+
+
+fn main() {
+    let mut x = 5;
+    {
+        let r1 = &mut x;
+        *r1 += 1;
+    } 
+    let r2 = &mut x;
+    *r2 += 1;
+    println!("{}", x);
+}
+\end{lstlisting}
+
+  \pause {\centering \cmark}
+
+  \pause On the other hand...
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+  \begin{lstlisting}[language=rust]
+struct Boxed(i32);
+
+impl Boxed {
+  fn inc(&mut self) -> () {
+    self.0 += 1;
+  }
+  fn consume(self) -> () {
+    ()
+  }
+  fn inc_immutable(self) -> Self {
+    Boxed(self.0 + 1)
+  }
+}
+
+fn main() {
+  let x = Boxed(5); // immutable struct created
+  let mut x = x.inc_immutable(); // consumed and bound to a new mutable variable
+  x.consume(); // moved and consumed
+  x.inc(); // error: use after move
+}
+\end{lstlisting}
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% that does it for Rust
+
+\begin{frame}[fragile]
+  \frametitle{What Verus is (and what it isn't)}
+
+  Verus:
+
+  \begin{itemize}[<+->]
+    \item[\cmark] is a verifier for Rust programs,
+    \item[\cmark] is a framework for writing specifications and proofs in Rust,
+    \item[\cmark] provides SMT encoding for said code and proofs, and
+    \item[\cmark] provides semantics for ghost code and its elimination,
+  \end{itemize}
+
+  \pause
+  but:
+
+  \begin{itemize}[<+->]
+    \item[\xmark] isn't a verifier or model for unsafe Rust, and
+    \item[\xmark] isn't even a model for safe Rust
+  \end{itemize}
+
+  \pause
+  Verus builds on the existing type and borrow checking done by the Rust
+  compiler. \pause A program is safe iff it passes the Rust compiler \emph{and}
+  Verus.
+
+\end{frame}
+
+% verifying a simple program in Rust
+
+\begin{frame}
+
+  \begin{center}
+    \large
+    Writing a simple program with Verus + SMT encoding
+  \end{center}
+
+\end{frame}
+
+% what the three modes are
+
+\begin{frame}
+
+  \centering
+
+  \begin{tabular}{c | c c c}
+                             & \lstinline|spec| & \lstinline|proof| & \lstinline|exec| \\
+    \hline
+    Call spec                & \cmark           & \cmark            & \cmark           \\
+    Call proof               & \xmark           & \cmark            & \cmark           \\
+    Call exec                & \xmark           & \xmark            & \cmark           \\
+    \pause
+    Compiled to machine code & \xmark           & \xmark            & \cmark           \\
+    \pause
+    Mutation                 & \xmark           & \cmark            & \cmark           \\
+    \pause
+    "SMT effects"            & \xmark           & \cmark            & \cmark           \\
+    \pause
+    Borrow-checking          & \xmark           & \cmark            & \cmark           \\
+    \pause
+    SMT Types                & \cmark           & \cmark            & \xmark           \\
+    Pre/post-conditions      & \xmark           & \cmark            & \cmark           \\
+  \end{tabular}
+\end{frame}
+
+% why do we need *three*?
+%% spec is effectively functional, and good for writing, well, specifications
+%% proof is the new middle ground, wherein it does still ahve to pass the borrow checker
+%% and linearity lends itself to using capabilities, in a sense
+%% this is where the "linear ghost types" part of the title comes in
+
+% so, why do we need these things at all>
+
+% mutexes in rust
+%% does something look weird here?
+%% why is this even allowed?
+\begin{frame}[fragile]
+  \frametitle{Mutexes in Rust}
+
+  \begin{lstlisting}[language=rust]
+const N: usize = 10;
+let data = Arc::new(Mutex::new(0));
+
+let (tx, rx) = channel();
+for _ in 0..N {
+    let (data, tx) = (Arc::clone(&data), tx.clone());
+    thread::spawn(move || {
+        let mut data = (* data).lock().unwrap();
+        *data += 1;
+        if *data == N {
+            tx.send(()).unwrap();
+        }
+    });
+}
+
+rx.recv().unwrap();
+\end{lstlisting}
+
+\end{frame}
+
+% interior mutability and the myth of safe rust
+%% <mutex source code>
+
+\begin{frame}[fragile]
+  \frametitle{Interior Mutability and the Myth of Safe Rust}
+
+  \begin{lstlisting}{language=rust}
+impl<T> Mutex<T> {
+  // ...
+
+  pub fn lock(&self) -> LockResult<MutexGuard<'_, T>> {
+    unsafe {
+        self.inner.lock();
+        MutexGuard::new(self)
+    }
+  }
+}
+  \end{lstlisting}
+
+\end{frame}
+
+% what does Verus do with this code?
+%% nothing
+%% Verus has no support for unsafe code
+
+\begin{frame}
+  \frametitle{Unsafe code in Verus}
+
+  What does Verus do with this code? \pause Nothing.
+
+  \pause
+  Verus does not attempt to (directly) verify unsafe code.
+
+\end{frame}
+
+% permissions
+%% instead, it provides a primitive for interior mutability
+%% Verus mutable concurrent cell
+\begin{frame}[fragile]
+  \frametitle{Interior Mutability via Linear Ghost Permissions}
+
+  Instead, it provides primitives that allow proving safety of code like the
+  Mutex example before. \pause This is made possible in part by the fact that
+  proof code is linearity checked.
+
+
+  \begin{lstlisting}[language=rust]
+    open_local_invariant!(&self.perm_inv => perm => {
+      r = self.pcell.replace(&mut perm, val);
+    });
+  \end{lstlisting}
+
+  \pause
+  Once open, the permission is used like a capability, and cannot be copied or
+  leaked due to borrow checking. Double-opening is guarded against by
+  the verifier specifically.
+
+  \pause
+  These objects can be verified as destroyed by consuming the permission object
+  (see PPtr).
+
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{On (Local) Invariants}
+
+  It is called an invariant because it additionally ensures that the value
+  stored in the cell satisfies the type invariant:
+
+  \begin{lstlisting}[language=rust]
+impl<K, V, Pred: InvariantPredicate<K, V>> LocalInvariant<K, V, Pred>
+  pub proof fn new(k: K, tracked v: V, ns: int) -> tracked i : LocalInvariant<K, V, Pred>
+    requires
+      Pred::inv(k, v),
+    ensures
+      i.constant() == k,
+      i.namespace() == ns,
+  \end{lstlisting}
+
+  The invariant checks are in \lstinline|proof| mode and are erased.
+  \lstinline|InvariantPredicate| is a typeclass just providing the
+  \lstinline|inv| function.
+
+\end{frame}
+
+\begin{frame}
+  
+  \begin{center}
+    {\Large Thanks! Questions?}
+
+    If we have more time we'll discuss and look at how certain things are
+    implemented in the (Rust or Verus) standard library or play with the
+    verifier.
+  \end{center}
+  
 \end{frame}
 
 \end{document}
